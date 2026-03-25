@@ -44,7 +44,6 @@
         position: absolute;
         left: 0;
         bottom: 96px;
-        background-image: url("./ChatGPT Image Mar 25, 2026, 02_25_44 PM.png");
         background-repeat: no-repeat;
         image-rendering: pixelated;
         transform-origin: center bottom;
@@ -52,6 +51,11 @@
         user-select: none;
         -webkit-user-drag: none;
         cursor: pointer;
+        outline: none;
+      }
+
+      #fox:focus-visible {
+        filter: drop-shadow(0 0 0 3px rgba(90, 140, 255, 0.25));
       }
 
       .label {
@@ -60,30 +64,57 @@
         bottom: 10px;
         transform: translateX(-50%);
         color: #7f4a27;
-        opacity: 0.8;
+        opacity: 0.85;
         font-size: 13px;
         letter-spacing: 0.01em;
+        text-align: center;
+        padding: 0 12px;
+      }
+
+      .error {
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(140, 34, 34, 0.9);
+        color: white;
+        padding: 10px 14px;
+        border-radius: 12px;
+        font-size: 14px;
+        display: none;
+      }
+
+      .error.show {
+        display: block;
       }
     </style>
   </head>
   <body>
     <div class="scene">
-      <div id="fox" role="img" aria-label="Animated pixel fox"></div>
+      <div
+        id="fox"
+        role="button"
+        tabindex="0"
+        aria-label="Animated pixel fox"
+      ></div>
       <div class="ground"></div>
     </div>
-    <div class="label">Click the fox for a cute reaction 🦊</div>
+
+    <div class="label">Click or tap the fox for a cute reaction 🦊</div>
+    <div id="error" class="error">Could not load fox sprite sheet.</div>
 
     <script>
       const foxEl = document.getElementById("fox");
-      const spriteImage = new Image();
-      spriteImage.src = "./ChatGPT Image Mar 25, 2026, 02_25_44 PM.png";
+      const errorEl = document.getElementById("error");
 
-      // Sprite sheet metadata.
+      const SPRITE_SRC = "./Foxxy.png";
+      const spriteImage = new Image();
+      spriteImage.src = SPRITE_SRC;
+
       const GRID_COLS = 4;
       const GRID_ROWS = 4;
       const SCALE = 6;
 
-      // Animation state machine.
       const ANIMATIONS = {
         idle: { frames: [0, 1, 2, 3], frameDuration: 130, loop: true, moves: false },
         walk: { frames: [4, 5, 6, 7], frameDuration: 100, loop: true, moves: true },
@@ -92,9 +123,8 @@
       };
 
       const fox = {
-        // Spatial / physics.
         x: 0,
-        y: 0, // vertical offset from ground, in px.
+        y: 0,
         vx: 110,
         vy: 0,
         direction: 1,
@@ -102,18 +132,16 @@
         jumpVelocity: 780,
         grounded: true,
 
-        // Animation.
         state: "walk",
         frameCursor: 0,
         frameTimer: 0,
 
-        // Effects.
         squash: 0,
 
-        // Behavior scheduling.
         actionTimerMs: 0,
-        nextRandomActionMs: 2500 + Math.random() * 3000,
+        nextRandomActionMs: randomActionDelay(),
         lastInteractionMs: performance.now(),
+        sleepingTriggered: false,
       };
 
       const viewport = {
@@ -123,11 +151,19 @@
       const metrics = {
         frameWidth: 0,
         frameHeight: 0,
-        spriteWidth: 0,
-        spriteHeight: 0,
+        renderFrameWidth: 0,
+        renderFrameHeight: 0,
       };
 
       let lastTimeMs = performance.now();
+
+      function randomActionDelay() {
+        return 2500 + Math.random() * 3000;
+      }
+
+      function clamp(v, min, max) {
+        return Math.max(min, Math.min(max, v));
+      }
 
       function setState(nextState, { resetFrame = true } = {}) {
         if (fox.state === nextState) return;
@@ -136,12 +172,8 @@
         if (resetFrame) fox.frameCursor = 0;
       }
 
-      function clamp(v, min, max) {
-        return Math.max(min, Math.min(max, v));
-      }
-
       function recalcBounds() {
-        viewport.maxX = Math.max(0, window.innerWidth - metrics.spriteWidth);
+        viewport.maxX = Math.max(0, window.innerWidth - metrics.renderFrameWidth);
         fox.x = clamp(fox.x, 0, viewport.maxX);
       }
 
@@ -149,6 +181,7 @@
         if (!fox.grounded) return;
         fox.grounded = false;
         fox.vy = fox.jumpVelocity;
+        fox.sleepingTriggered = false;
         setState("jump");
       }
 
@@ -159,40 +192,66 @@
         return "cute";
       }
 
+      function triggerCuteReaction(nowMs = performance.now()) {
+        fox.lastInteractionMs = nowMs;
+        fox.actionTimerMs = 0;
+        fox.nextRandomActionMs = randomActionDelay();
+        fox.sleepingTriggered = false;
+
+        if (fox.state === "jump") return;
+        setState("cute");
+      }
+
+      function returnToWalk() {
+        setState("walk");
+        fox.actionTimerMs = 0;
+        fox.nextRandomActionMs = randomActionDelay();
+      }
+
       function updateBehavior(dtMs, nowMs) {
         fox.actionTimerMs += dtMs;
 
-        // If no interaction for a while and fox is grounded, show sleepy/cute behavior.
         const idleDurationMs = nowMs - fox.lastInteractionMs;
-        if (idleDurationMs > 6500 && fox.grounded && fox.state === "walk") {
+
+        if (
+          idleDurationMs > 6500 &&
+          fox.grounded &&
+          fox.state === "walk" &&
+          !fox.sleepingTriggered
+        ) {
           setState("cute");
           fox.actionTimerMs = 0;
-          fox.lastInteractionMs = nowMs;
+          fox.sleepingTriggered = true;
           return;
         }
 
-        // Trigger periodic random behavior while walking.
         if (fox.state === "walk") {
           fox.nextRandomActionMs -= dtMs;
+
           if (fox.nextRandomActionMs <= 0) {
             const next = chooseRandomBehavior();
             fox.actionTimerMs = 0;
-            fox.nextRandomActionMs = 2500 + Math.random() * 3000;
-            if (next === "jump") beginJump();
-            else setState(next);
+            fox.nextRandomActionMs = randomActionDelay();
+
+            if (next === "jump") {
+              beginJump();
+            } else {
+              setState(next);
+            }
           }
           return;
         }
 
-        // Timeboxed states return to walk.
         const timeoutByState = {
           idle: 1200,
           cute: 1600,
         };
 
-        if ((fox.state === "idle" || fox.state === "cute") && fox.actionTimerMs >= timeoutByState[fox.state]) {
-          setState("walk");
-          fox.actionTimerMs = 0;
+        if (
+          (fox.state === "idle" || fox.state === "cute") &&
+          fox.actionTimerMs >= timeoutByState[fox.state]
+        ) {
+          returnToWalk();
         }
       }
 
@@ -223,15 +282,12 @@
             fox.grounded = true;
             fox.squash = 0.16;
 
-            // End jump when landing.
             if (fox.state === "jump") {
-              setState("walk");
-              fox.actionTimerMs = 0;
+              returnToWalk();
             }
           }
         }
 
-        // Landing squash eases out quickly.
         fox.squash = Math.max(0, fox.squash - dtSec * 0.7);
       }
 
@@ -264,8 +320,8 @@
         const col = frame % GRID_COLS;
         const row = Math.floor(frame / GRID_COLS);
 
-        // Only compositor-friendly properties are updated each frame.
-        foxEl.style.backgroundPosition = `-${col * metrics.spriteWidth}px -${row * metrics.spriteHeight}px`;
+        foxEl.style.backgroundPosition =
+          `-${col * metrics.renderFrameWidth}px -${row * metrics.renderFrameHeight}px`;
 
         const squashY = 1 - fox.squash;
         const stretchX = 1 + fox.squash * 0.65;
@@ -286,29 +342,44 @@
       }
 
       foxEl.addEventListener("click", () => {
-        fox.lastInteractionMs = performance.now();
-        fox.actionTimerMs = 0;
-        if (fox.state === "jump") return;
-        setState("cute");
+        triggerCuteReaction();
+      });
+
+      foxEl.addEventListener("pointerdown", () => {
+        triggerCuteReaction();
+      });
+
+      foxEl.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          triggerCuteReaction();
+        }
       });
 
       window.addEventListener("resize", recalcBounds);
 
       spriteImage.addEventListener("load", () => {
-        // Dynamic frame sizing based on 4x4 sheet.
         metrics.frameWidth = Math.floor(spriteImage.width / GRID_COLS);
         metrics.frameHeight = Math.floor(spriteImage.height / GRID_ROWS);
-        metrics.spriteWidth = metrics.frameWidth * SCALE;
-        metrics.spriteHeight = metrics.frameHeight * SCALE;
+        metrics.renderFrameWidth = metrics.frameWidth * SCALE;
+        metrics.renderFrameHeight = metrics.frameHeight * SCALE;
 
-        foxEl.style.width = `${metrics.spriteWidth}px`;
-        foxEl.style.height = `${metrics.spriteHeight}px`;
-        foxEl.style.backgroundSize = `${spriteImage.width * SCALE}px ${spriteImage.height * SCALE}px`;
+        foxEl.style.width = `${metrics.renderFrameWidth}px`;
+        foxEl.style.height = `${metrics.renderFrameHeight}px`;
+        foxEl.style.backgroundImage = `url("${SPRITE_SRC}")`;
+        foxEl.style.backgroundSize =
+          `${spriteImage.width * SCALE}px ${spriteImage.height * SCALE}px`;
 
-        fox.x = (window.innerWidth - metrics.spriteWidth) * 0.35;
+        fox.x = (window.innerWidth - metrics.renderFrameWidth) * 0.35;
         recalcBounds();
 
+        render();
         requestAnimationFrame(loop);
+      });
+
+      spriteImage.addEventListener("error", () => {
+        errorEl.classList.add("show");
+        console.error("Failed to load sprite sheet:", spriteImage.src);
       });
     </script>
   </body>
