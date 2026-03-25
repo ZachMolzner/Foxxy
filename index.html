@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Production Fox Sprite Sheet Demo</title>
+    <title>Foxxy Companion</title>
     <style>
       :root {
         --bg-top: #fff9f1;
@@ -52,6 +52,7 @@
         -webkit-user-drag: none;
         cursor: pointer;
         outline: none;
+        z-index: 2;
       }
 
       #fox:focus-visible {
@@ -64,7 +65,7 @@
         bottom: 10px;
         transform: translateX(-50%);
         color: #7f4a27;
-        opacity: 0.85;
+        opacity: 0.9;
         font-size: 13px;
         letter-spacing: 0.01em;
         text-align: center;
@@ -82,30 +83,77 @@
         border-radius: 12px;
         font-size: 14px;
         display: none;
+        z-index: 10;
       }
 
       .error.show {
         display: block;
       }
+
+      #zzz-layer {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 3;
+      }
+
+      .zzz {
+        position: absolute;
+        color: #6fa8ff;
+        font-weight: 700;
+        opacity: 0;
+        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
+        animation: zzz-float 2.2s ease-out forwards;
+        will-change: transform, opacity;
+      }
+
+      .zzz.z1 {
+        font-size: 18px;
+      }
+
+      .zzz.z2 {
+        font-size: 24px;
+      }
+
+      .zzz.z3 {
+        font-size: 30px;
+      }
+
+      @keyframes zzz-float {
+        0% {
+          opacity: 0;
+          transform: translate3d(0, 0, 0) scale(0.85);
+        }
+        15% {
+          opacity: 0.95;
+        }
+        100% {
+          opacity: 0;
+          transform: translate3d(28px, -70px, 0) scale(1.12);
+        }
+      }
     </style>
   </head>
   <body>
-    <div class="scene">
+    <div class="scene" id="scene">
       <div
         id="fox"
         role="button"
         tabindex="0"
         aria-label="Animated pixel fox"
       ></div>
+      <div id="zzz-layer" aria-hidden="true"></div>
       <div class="ground"></div>
     </div>
 
-    <div class="label">Click or tap the fox for a cute reaction 🦊</div>
-    <div id="error" class="error">Could not load fox sprite sheet.</div>
+    <div class="label">Move your mouse and Foxxy follows • Click Foxxy for a cute reaction 🦊</div>
+    <div id="error" class="error">Could not load Foxxy sprite sheet.</div>
 
     <script>
       const foxEl = document.getElementById("fox");
       const errorEl = document.getElementById("error");
+      const sceneEl = document.getElementById("scene");
+      const zzzLayerEl = document.getElementById("zzz-layer");
 
       const SPRITE_SRC = "./Foxxy.png";
       const spriteImage = new Image();
@@ -114,34 +162,39 @@
       const GRID_COLS = 4;
       const GRID_ROWS = 4;
       const SCALE = 6;
+      const GROUND_HEIGHT = 96;
 
       const ANIMATIONS = {
-        idle: { frames: [0, 1, 2, 3], frameDuration: 130, loop: true, moves: false },
-        walk: { frames: [4, 5, 6, 7], frameDuration: 100, loop: true, moves: true },
-        jump: { frames: [8, 9, 10, 11], frameDuration: 100, loop: false, moves: true },
-        cute: { frames: [12, 13, 14, 15], frameDuration: 140, loop: true, moves: false },
+        idle: { frames: [0, 1, 2, 3], frameDuration: 150, loop: true, moves: false },
+        walk: { frames: [4, 5, 6, 7], frameDuration: 95, loop: true, moves: true },
+        jump: { frames: [8, 9, 10, 11], frameDuration: 95, loop: false, moves: true },
+        sleep: { frames: [12, 13, 14, 15], frameDuration: 220, loop: true, moves: false },
+        cute: { frames: [12, 13, 14, 15], frameDuration: 135, loop: true, moves: false },
       };
 
       const fox = {
         x: 0,
         y: 0,
-        vx: 110,
+        vx: 0,
         vy: 0,
+        maxSpeed: 220,
+        acceleration: 1300,
+        friction: 1700,
         direction: 1,
         gravity: -1750,
         jumpVelocity: 780,
         grounded: true,
 
-        state: "walk",
+        state: "idle",
         frameCursor: 0,
         frameTimer: 0,
 
         squash: 0,
 
         actionTimerMs: 0,
-        nextRandomActionMs: randomActionDelay(),
         lastInteractionMs: performance.now(),
         sleepingTriggered: false,
+        sleepBubbleTimerMs: 0,
       };
 
       const viewport = {
@@ -155,18 +208,23 @@
         renderFrameHeight: 0,
       };
 
-      let lastTimeMs = performance.now();
+      const mouse = {
+        x: window.innerWidth * 0.5,
+        active: false,
+      };
 
-      function randomActionDelay() {
-        return 2500 + Math.random() * 3000;
-      }
+      let lastTimeMs = performance.now();
 
       function clamp(v, min, max) {
         return Math.max(min, Math.min(max, v));
       }
 
-      function setState(nextState, { resetFrame = true } = {}) {
-        if (fox.state === nextState) return;
+      function approximately(a, b, epsilon = 4) {
+        return Math.abs(a - b) <= epsilon;
+      }
+
+      function setState(nextState, { resetFrame = true, force = false } = {}) {
+        if (!force && fox.state === nextState) return;
         fox.state = nextState;
         fox.frameTimer = 0;
         if (resetFrame) fox.frameCursor = 0;
@@ -175,6 +233,7 @@
       function recalcBounds() {
         viewport.maxX = Math.max(0, window.innerWidth - metrics.renderFrameWidth);
         fox.x = clamp(fox.x, 0, viewport.maxX);
+        mouse.x = clamp(mouse.x, 0, window.innerWidth);
       }
 
       function beginJump() {
@@ -182,30 +241,67 @@
         fox.grounded = false;
         fox.vy = fox.jumpVelocity;
         fox.sleepingTriggered = false;
+        fox.sleepBubbleTimerMs = 0;
         setState("jump");
-      }
-
-      function chooseRandomBehavior() {
-        const roll = Math.random();
-        if (roll < 0.45) return "idle";
-        if (roll < 0.75) return "jump";
-        return "cute";
       }
 
       function triggerCuteReaction(nowMs = performance.now()) {
         fox.lastInteractionMs = nowMs;
         fox.actionTimerMs = 0;
-        fox.nextRandomActionMs = randomActionDelay();
         fox.sleepingTriggered = false;
+        fox.sleepBubbleTimerMs = 0;
 
         if (fox.state === "jump") return;
-        setState("cute");
+        setState("cute", { force: true });
       }
 
-      function returnToWalk() {
-        setState("walk");
+      function returnToMouseFollow() {
         fox.actionTimerMs = 0;
-        fox.nextRandomActionMs = randomActionDelay();
+        fox.sleepBubbleTimerMs = 0;
+        if (!fox.grounded) {
+          setState("jump");
+          return;
+        }
+
+        if (!mouse.active) {
+          setState("idle");
+          return;
+        }
+
+        const targetX = getTargetFoxX();
+        const distance = targetX - fox.x;
+
+        if (Math.abs(distance) > 10) {
+          setState("walk");
+        } else {
+          setState("idle");
+        }
+      }
+
+      function getTargetFoxX() {
+        return clamp(mouse.x - metrics.renderFrameWidth * 0.5, 0, viewport.maxX);
+      }
+
+      function spawnSleepBubble() {
+        const foxCenterX = fox.x + metrics.renderFrameWidth * 0.68;
+        const foxTopY = window.innerHeight - GROUND_HEIGHT - fox.y - metrics.renderFrameHeight + 18;
+
+        const variants = [
+          { text: "z", className: "z1", dx: 0, dy: 0 },
+          { text: "Z", className: "z2", dx: 14, dy: -10 },
+          { text: "Z", className: "z3", dx: 28, dy: -22 },
+        ];
+
+        variants.forEach((variant, index) => {
+          const el = document.createElement("div");
+          el.className = `zzz ${variant.className}`;
+          el.textContent = variant.text;
+          el.style.left = `${foxCenterX + variant.dx}px`;
+          el.style.top = `${foxTopY + variant.dy}px`;
+          el.style.animationDelay = `${index * 0.18}s`;
+          zzzLayerEl.appendChild(el);
+          el.addEventListener("animationend", () => el.remove(), { once: true });
+        });
       }
 
       function updateBehavior(dtMs, nowMs) {
@@ -214,60 +310,86 @@
         const idleDurationMs = nowMs - fox.lastInteractionMs;
 
         if (
-          idleDurationMs > 6500 &&
+          idleDurationMs > 7000 &&
           fox.grounded &&
-          fox.state === "walk" &&
-          !fox.sleepingTriggered
+          (fox.state === "idle" || fox.state === "walk") &&
+          !fox.sleepingTriggered &&
+          !mouse.active
         ) {
-          setState("cute");
-          fox.actionTimerMs = 0;
+          fox.vx = 0;
+          fox.sleepBubbleTimerMs = 0;
           fox.sleepingTriggered = true;
+          setState("sleep");
+          fox.actionTimerMs = 0;
           return;
         }
 
-        if (fox.state === "walk") {
-          fox.nextRandomActionMs -= dtMs;
+        if (fox.state === "cute" && fox.actionTimerMs >= 1400) {
+          returnToMouseFollow();
+          return;
+        }
 
-          if (fox.nextRandomActionMs <= 0) {
-            const next = chooseRandomBehavior();
-            fox.actionTimerMs = 0;
-            fox.nextRandomActionMs = randomActionDelay();
-
-            if (next === "jump") {
-              beginJump();
-            } else {
-              setState(next);
-            }
+        if (fox.state === "sleep") {
+          fox.sleepBubbleTimerMs += dtMs;
+          if (fox.sleepBubbleTimerMs >= 1700) {
+            fox.sleepBubbleTimerMs = 0;
+            spawnSleepBubble();
           }
-          return;
-        }
 
-        const timeoutByState = {
-          idle: 1200,
-          cute: 1600,
-        };
-
-        if (
-          (fox.state === "idle" || fox.state === "cute") &&
-          fox.actionTimerMs >= timeoutByState[fox.state]
-        ) {
-          returnToWalk();
+          if (mouse.active || idleDurationMs < 6500) {
+            fox.sleepingTriggered = false;
+            returnToMouseFollow();
+          }
         }
       }
 
       function updateMovement(dtSec) {
-        const animation = ANIMATIONS[fox.state];
-        if (!animation.moves) return;
+        if (fox.state === "cute" || fox.state === "sleep") {
+          fox.vx = 0;
+          return;
+        }
 
-        fox.vx = Math.abs(fox.vx) * fox.direction;
+        if (fox.state === "jump") {
+          fox.x += fox.vx * dtSec;
+          fox.x = clamp(fox.x, 0, viewport.maxX);
+
+          if (fox.x <= 0) fox.direction = 1;
+          if (fox.x >= viewport.maxX) fox.direction = -1;
+          return;
+        }
+
+        const targetX = getTargetFoxX();
+        const distance = targetX - fox.x;
+        const moveThreshold = 6;
+
+        if (Math.abs(distance) > moveThreshold) {
+          fox.direction = distance > 0 ? 1 : -1;
+        }
+
+        if (Math.abs(distance) <= moveThreshold) {
+          if (fox.vx > 0) {
+            fox.vx = Math.max(0, fox.vx - fox.friction * dtSec);
+          } else if (fox.vx < 0) {
+            fox.vx = Math.min(0, fox.vx + fox.friction * dtSec);
+          }
+        } else {
+          fox.vx += fox.direction * fox.acceleration * dtSec;
+          fox.vx = clamp(fox.vx, -fox.maxSpeed, fox.maxSpeed);
+        }
+
         fox.x += fox.vx * dtSec;
+        fox.x = clamp(fox.x, 0, viewport.maxX);
 
-        if (fox.x <= 0) {
-          fox.x = 0;
-          fox.direction = 1;
-        } else if (fox.x >= viewport.maxX) {
-          fox.x = viewport.maxX;
-          fox.direction = -1;
+        if (fox.x === 0 && fox.vx < 0) fox.vx = 0;
+        if (fox.x === viewport.maxX && fox.vx > 0) fox.vx = 0;
+
+        if (approximately(fox.x, targetX, 8) && Math.abs(fox.vx) < 24) {
+          fox.vx = 0;
+          setState("idle");
+        } else if (Math.abs(fox.vx) > 8) {
+          setState("walk");
+        } else {
+          setState("idle");
         }
       }
 
@@ -281,10 +403,7 @@
             fox.vy = 0;
             fox.grounded = true;
             fox.squash = 0.16;
-
-            if (fox.state === "jump") {
-              returnToWalk();
-            }
+            returnToMouseFollow();
           }
         }
 
@@ -354,6 +473,27 @@
           event.preventDefault();
           triggerCuteReaction();
         }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          fox.lastInteractionMs = performance.now();
+          mouse.active = true;
+          beginJump();
+        }
+      });
+
+      window.addEventListener("pointermove", (event) => {
+        mouse.x = event.clientX;
+        mouse.active = true;
+        fox.lastInteractionMs = performance.now();
+        fox.sleepingTriggered = false;
+
+        if (fox.state === "sleep") {
+          returnToMouseFollow();
+        }
+      });
+
+      window.addEventListener("pointerleave", () => {
+        mouse.active = false;
       });
 
       window.addEventListener("resize", recalcBounds);
@@ -370,7 +510,7 @@
         foxEl.style.backgroundSize =
           `${spriteImage.width * SCALE}px ${spriteImage.height * SCALE}px`;
 
-        fox.x = (window.innerWidth - metrics.renderFrameWidth) * 0.35;
+        fox.x = clamp((window.innerWidth - metrics.renderFrameWidth) * 0.35, 0, window.innerWidth);
         recalcBounds();
 
         render();
