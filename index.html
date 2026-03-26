@@ -6,15 +6,11 @@
     <title>Foxxy Companion</title>
     <style>
       :root {
-        --bg-top: #fff9f1;
-        --bg-bottom: #ffe7cf;
-        --ground-top: #f8d7b6;
-        --ground-bottom: #f1c39b;
+        --ground-top: rgba(248, 215, 182, 0.85);
+        --ground-bottom: rgba(241, 195, 155, 0.92);
       }
 
-      * {
-        box-sizing: border-box;
-      }
+      * { box-sizing: border-box; }
 
       html,
       body {
@@ -22,7 +18,7 @@
         height: 100%;
         margin: 0;
         overflow: hidden;
-        background: linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+        background: transparent;
         font-family: Inter, system-ui, -apple-system, sans-serif;
       }
 
@@ -38,12 +34,15 @@
         height: 96px;
         border-top: 2px solid rgba(145, 82, 28, 0.25);
         background: linear-gradient(180deg, var(--ground-top), var(--ground-bottom));
+        backdrop-filter: blur(2px);
       }
 
       #fox {
         position: absolute;
         left: 0;
         bottom: 96px;
+        width: 192px;
+        height: 192px;
         background-repeat: no-repeat;
         image-rendering: pixelated;
         transform-origin: center bottom;
@@ -55,6 +54,27 @@
         z-index: 2;
       }
 
+      #fox.placeholder {
+        display: grid;
+        place-items: center;
+        text-align: center;
+        padding: 8px;
+        border: 2px dashed rgba(127, 74, 39, 0.9);
+        border-radius: 14px;
+        color: #7f4a27;
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.2;
+        background:
+          repeating-linear-gradient(
+            45deg,
+            rgba(255, 209, 163, 0.85) 0px,
+            rgba(255, 209, 163, 0.85) 8px,
+            rgba(255, 189, 122, 0.85) 8px,
+            rgba(255, 189, 122, 0.85) 16px
+          );
+      }
+
       #fox:focus-visible {
         filter: drop-shadow(0 0 0 3px rgba(90, 140, 255, 0.25));
       }
@@ -64,12 +84,12 @@
         left: 50%;
         bottom: 10px;
         transform: translateX(-50%);
-        color: #7f4a27;
-        opacity: 0.9;
+        color: rgba(127, 74, 39, 0.85);
         font-size: 13px;
         letter-spacing: 0.01em;
         text-align: center;
         padding: 0 12px;
+        text-shadow: 0 1px 2px rgba(255, 255, 255, 0.7);
       }
 
       .error {
@@ -86,9 +106,7 @@
         z-index: 10;
       }
 
-      .error.show {
-        display: block;
-      }
+      .error.show { display: block; }
 
       #zzz-layer {
         position: absolute;
@@ -104,79 +122,51 @@
         opacity: 0;
         text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
         animation: zzz-float 2.2s ease-out forwards;
-        will-change: transform, opacity;
       }
 
-      .zzz.z1 {
-        font-size: 18px;
-      }
-
-      .zzz.z2 {
-        font-size: 24px;
-      }
-
-      .zzz.z3 {
-        font-size: 30px;
-      }
+      .zzz.z1 { font-size: 18px; }
+      .zzz.z2 { font-size: 24px; }
+      .zzz.z3 { font-size: 30px; }
 
       @keyframes zzz-float {
-        0% {
-          opacity: 0;
-          transform: translate3d(0, 0, 0) scale(0.85);
-        }
-        15% {
-          opacity: 0.95;
-        }
-        100% {
-          opacity: 0;
-          transform: translate3d(28px, -70px, 0) scale(1.12);
-        }
+        0% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.85); }
+        15% { opacity: 0.95; }
+        100% { opacity: 0; transform: translate3d(28px, -70px, 0) scale(1.12); }
       }
     </style>
   </head>
   <body>
     <div class="scene" id="scene">
-      <div
-        id="fox"
-        role="button"
-        tabindex="0"
-        aria-label="Animated pixel fox"
-      ></div>
+      <div id="fox" role="button" tabindex="0" aria-label="Animated pixel fox"></div>
       <div id="zzz-layer" aria-hidden="true"></div>
       <div class="ground"></div>
     </div>
 
     <div class="label">Move your mouse and Foxxy follows • Click Foxxy for a cute reaction 🦊</div>
-    <div id="error" class="error">Could not load Foxxy sprite sheet.</div>
+    <div id="error" class="error"></div>
 
     <script>
-      const foxEl = document.getElementById("fox");
-      const errorEl = document.getElementById("error");
-      const sceneEl = document.getElementById("scene");
-      const zzzLayerEl = document.getElementById("zzz-layer");
+      const foxEl = document.getElementById('fox');
+      const errorEl = document.getElementById('error');
+      const zzzLayerEl = document.getElementById('zzz-layer');
 
-      const SPRITE_SRC = "./Foxxy.png";
-      const spriteImage = new Image();
-      spriteImage.src = SPRITE_SRC;
-
+      const SPRITE_SRC = './Foxxy.png';
       const GRID_COLS = 4;
       const GRID_ROWS = 4;
       const SCALE = 6;
       const GROUND_HEIGHT = 96;
+      const FALLBACK_FRAME = 32;
 
       const ANIMATIONS = {
-        idle: { frames: [0, 1, 2, 3], frameDuration: 150, loop: true, moves: false },
-        walk: { frames: [4, 5, 6, 7], frameDuration: 95, loop: true, moves: true },
-        jump: { frames: [8, 9, 10, 11], frameDuration: 95, loop: false, moves: true },
-        sleep: { frames: [12, 13, 14, 15], frameDuration: 220, loop: true, moves: false },
-        cute: { frames: [12, 13, 14, 15], frameDuration: 135, loop: true, moves: false },
+        idle: { frames: [0, 1, 2, 3], frameDuration: 150, loop: true },
+        walk: { frames: [4, 5, 6, 7], frameDuration: 95, loop: true },
+        jump: { frames: [8, 9, 10, 11], frameDuration: 95, loop: false },
+        sleep: { frames: [12, 13, 14, 15], frameDuration: 220, loop: true },
+        cute: { frames: [12, 13, 14, 15], frameDuration: 135, loop: true }
       };
 
       const fox = {
-        x: 0,
-        y: 0,
-        vx: 0,
-        vy: 0,
+        x: 0, y: 0, vx: 0, vy: 0,
         maxSpeed: 220,
         acceleration: 1300,
         friction: 1700,
@@ -184,50 +174,59 @@
         gravity: -1750,
         jumpVelocity: 780,
         grounded: true,
-
-        state: "idle",
+        state: 'idle',
         frameCursor: 0,
         frameTimer: 0,
-
         squash: 0,
-
         actionTimerMs: 0,
         lastInteractionMs: performance.now(),
         sleepingTriggered: false,
-        sleepBubbleTimerMs: 0,
+        sleepBubbleTimerMs: 0
       };
 
-      const viewport = {
-        maxX: 0,
-      };
-
-      const metrics = {
-        frameWidth: 0,
-        frameHeight: 0,
-        renderFrameWidth: 0,
-        renderFrameHeight: 0,
-      };
-
-      const mouse = {
-        x: window.innerWidth * 0.5,
-        active: false,
-      };
+      const viewport = { maxX: 0 };
+      const metrics = { frameWidth: 0, frameHeight: 0, renderFrameWidth: 0, renderFrameHeight: 0 };
+      const mouse = { x: window.innerWidth * 0.5, active: false };
+      const spriteImage = new Image();
 
       let lastTimeMs = performance.now();
+      let spriteReady = false;
 
-      function clamp(v, min, max) {
-        return Math.max(min, Math.min(max, v));
-      }
-
-      function approximately(a, b, epsilon = 4) {
-        return Math.abs(a - b) <= epsilon;
-      }
+      function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+      function approximately(a, b, epsilon = 4) { return Math.abs(a - b) <= epsilon; }
 
       function setState(nextState, { resetFrame = true, force = false } = {}) {
         if (!force && fox.state === nextState) return;
         fox.state = nextState;
         fox.frameTimer = 0;
         if (resetFrame) fox.frameCursor = 0;
+      }
+
+      function showError(message) {
+        errorEl.textContent = message;
+        errorEl.classList.add('show');
+      }
+
+      function configureMetrics({ frameWidth, frameHeight, hasSprite }) {
+        metrics.frameWidth = frameWidth;
+        metrics.frameHeight = frameHeight;
+        metrics.renderFrameWidth = frameWidth * SCALE;
+        metrics.renderFrameHeight = frameHeight * SCALE;
+        foxEl.style.width = `${metrics.renderFrameWidth}px`;
+        foxEl.style.height = `${metrics.renderFrameHeight}px`;
+
+        if (hasSprite) {
+          foxEl.classList.remove('placeholder');
+          foxEl.textContent = '';
+          foxEl.style.backgroundImage = `url("${SPRITE_SRC}")`;
+          foxEl.style.backgroundSize = `${spriteImage.width * SCALE}px ${spriteImage.height * SCALE}px`;
+        } else {
+          foxEl.classList.add('placeholder');
+          foxEl.textContent = 'Foxxy asset\ngoes here';
+          foxEl.style.backgroundImage = 'none';
+          foxEl.style.backgroundSize = 'auto';
+          foxEl.style.backgroundPosition = 'center';
+        }
       }
 
       function recalcBounds() {
@@ -242,7 +241,7 @@
         fox.vy = fox.jumpVelocity;
         fox.sleepingTriggered = false;
         fox.sleepBubbleTimerMs = 0;
-        setState("jump");
+        setState('jump');
       }
 
       function triggerCuteReaction(nowMs = performance.now()) {
@@ -250,86 +249,71 @@
         fox.actionTimerMs = 0;
         fox.sleepingTriggered = false;
         fox.sleepBubbleTimerMs = 0;
-
-        if (fox.state === "jump") return;
-        setState("cute", { force: true });
-      }
-
-      function returnToMouseFollow() {
-        fox.actionTimerMs = 0;
-        fox.sleepBubbleTimerMs = 0;
-        if (!fox.grounded) {
-          setState("jump");
-          return;
-        }
-
-        if (!mouse.active) {
-          setState("idle");
-          return;
-        }
-
-        const targetX = getTargetFoxX();
-        const distance = targetX - fox.x;
-
-        if (Math.abs(distance) > 10) {
-          setState("walk");
-        } else {
-          setState("idle");
-        }
+        if (fox.state === 'jump') return;
+        setState('cute', { force: true });
       }
 
       function getTargetFoxX() {
         return clamp(mouse.x - metrics.renderFrameWidth * 0.5, 0, viewport.maxX);
       }
 
+      function returnToMouseFollow() {
+        fox.actionTimerMs = 0;
+        fox.sleepBubbleTimerMs = 0;
+
+        if (!fox.grounded) return setState('jump');
+        if (!mouse.active) return setState('idle');
+
+        const targetX = getTargetFoxX();
+        const distance = targetX - fox.x;
+        setState(Math.abs(distance) > 10 ? 'walk' : 'idle');
+      }
+
       function spawnSleepBubble() {
         const foxCenterX = fox.x + metrics.renderFrameWidth * 0.68;
         const foxTopY = window.innerHeight - GROUND_HEIGHT - fox.y - metrics.renderFrameHeight + 18;
 
-        const variants = [
-          { text: "z", className: "z1", dx: 0, dy: 0 },
-          { text: "Z", className: "z2", dx: 14, dy: -10 },
-          { text: "Z", className: "z3", dx: 28, dy: -22 },
-        ];
-
-        variants.forEach((variant, index) => {
-          const el = document.createElement("div");
-          el.className = `zzz ${variant.className}`;
-          el.textContent = variant.text;
-          el.style.left = `${foxCenterX + variant.dx}px`;
-          el.style.top = `${foxTopY + variant.dy}px`;
-          el.style.animationDelay = `${index * 0.18}s`;
-          zzzLayerEl.appendChild(el);
-          el.addEventListener("animationend", () => el.remove(), { once: true });
+        [
+          { text: 'z', className: 'z1', dx: 0, dy: 0 },
+          { text: 'Z', className: 'z2', dx: 14, dy: -10 },
+          { text: 'Z', className: 'z3', dx: 28, dy: -22 }
+        ].forEach((variant, index) => {
+          const bubbleEl = document.createElement('div');
+          bubbleEl.className = `zzz ${variant.className}`;
+          bubbleEl.textContent = variant.text;
+          bubbleEl.style.left = `${foxCenterX + variant.dx}px`;
+          bubbleEl.style.top = `${foxTopY + variant.dy}px`;
+          bubbleEl.style.animationDelay = `${index * 0.18}s`;
+          zzzLayerEl.appendChild(bubbleEl);
+          bubbleEl.addEventListener('animationend', () => bubbleEl.remove(), { once: true });
         });
       }
 
       function updateBehavior(dtMs, nowMs) {
         fox.actionTimerMs += dtMs;
-
         const idleDurationMs = nowMs - fox.lastInteractionMs;
 
         if (
           idleDurationMs > 7000 &&
           fox.grounded &&
-          (fox.state === "idle" || fox.state === "walk") &&
+          (fox.state === 'idle' || fox.state === 'walk') &&
           !fox.sleepingTriggered &&
           !mouse.active
         ) {
           fox.vx = 0;
           fox.sleepBubbleTimerMs = 0;
           fox.sleepingTriggered = true;
-          setState("sleep");
+          setState('sleep');
           fox.actionTimerMs = 0;
           return;
         }
 
-        if (fox.state === "cute" && fox.actionTimerMs >= 1400) {
+        if (fox.state === 'cute' && fox.actionTimerMs >= 1400) {
           returnToMouseFollow();
           return;
         }
 
-        if (fox.state === "sleep") {
+        if (fox.state === 'sleep') {
           fox.sleepBubbleTimerMs += dtMs;
           if (fox.sleepBubbleTimerMs >= 1700) {
             fox.sleepBubbleTimerMs = 0;
@@ -344,15 +328,13 @@
       }
 
       function updateMovement(dtSec) {
-        if (fox.state === "cute" || fox.state === "sleep") {
+        if (fox.state === 'cute' || fox.state === 'sleep') {
           fox.vx = 0;
           return;
         }
 
-        if (fox.state === "jump") {
-          fox.x += fox.vx * dtSec;
-          fox.x = clamp(fox.x, 0, viewport.maxX);
-
+        if (fox.state === 'jump') {
+          fox.x = clamp(fox.x + fox.vx * dtSec, 0, viewport.maxX);
           if (fox.x <= 0) fox.direction = 1;
           if (fox.x >= viewport.maxX) fox.direction = -1;
           return;
@@ -367,29 +349,25 @@
         }
 
         if (Math.abs(distance) <= moveThreshold) {
-          if (fox.vx > 0) {
-            fox.vx = Math.max(0, fox.vx - fox.friction * dtSec);
-          } else if (fox.vx < 0) {
-            fox.vx = Math.min(0, fox.vx + fox.friction * dtSec);
-          }
+          if (fox.vx > 0) fox.vx = Math.max(0, fox.vx - fox.friction * dtSec);
+          if (fox.vx < 0) fox.vx = Math.min(0, fox.vx + fox.friction * dtSec);
         } else {
           fox.vx += fox.direction * fox.acceleration * dtSec;
           fox.vx = clamp(fox.vx, -fox.maxSpeed, fox.maxSpeed);
         }
 
-        fox.x += fox.vx * dtSec;
-        fox.x = clamp(fox.x, 0, viewport.maxX);
+        fox.x = clamp(fox.x + fox.vx * dtSec, 0, viewport.maxX);
 
         if (fox.x === 0 && fox.vx < 0) fox.vx = 0;
         if (fox.x === viewport.maxX && fox.vx > 0) fox.vx = 0;
 
         if (approximately(fox.x, targetX, 8) && Math.abs(fox.vx) < 24) {
           fox.vx = 0;
-          setState("idle");
+          setState('idle');
         } else if (Math.abs(fox.vx) > 8) {
-          setState("walk");
+          setState('walk');
         } else {
-          setState("idle");
+          setState('idle');
         }
       }
 
@@ -416,7 +394,6 @@
 
         while (fox.frameTimer >= animation.frameDuration) {
           fox.frameTimer -= animation.frameDuration;
-
           if (fox.frameCursor < animation.frames.length - 1) {
             fox.frameCursor += 1;
           } else if (animation.loop) {
@@ -436,15 +413,15 @@
       function render() {
         const animation = ANIMATIONS[fox.state];
         const frame = animation.frames[fox.frameCursor];
-        const col = frame % GRID_COLS;
-        const row = Math.floor(frame / GRID_COLS);
 
-        foxEl.style.backgroundPosition =
-          `-${col * metrics.renderFrameWidth}px -${row * metrics.renderFrameHeight}px`;
+        if (spriteReady) {
+          const col = frame % GRID_COLS;
+          const row = Math.floor(frame / GRID_COLS);
+          foxEl.style.backgroundPosition = `-${col * metrics.renderFrameWidth}px -${row * metrics.renderFrameHeight}px`;
+        }
 
         const squashY = 1 - fox.squash;
         const stretchX = 1 + fox.squash * 0.65;
-
         foxEl.style.transform =
           `translate3d(${fox.x}px, ${-fox.y}px, 0) ` +
           `scaleX(${fox.direction * stretchX}) ` +
@@ -454,26 +431,35 @@
       function loop(nowMs) {
         const dtMs = Math.min(40, nowMs - lastTimeMs);
         lastTimeMs = nowMs;
-
         update(dtMs, nowMs);
         render();
         requestAnimationFrame(loop);
       }
 
-      foxEl.addEventListener("click", () => {
-        triggerCuteReaction();
-      });
+      function startApp() {
+        fox.x = clamp((window.innerWidth - metrics.renderFrameWidth) * 0.35, 0, window.innerWidth);
+        recalcBounds();
+        render();
+        requestAnimationFrame(loop);
+      }
 
-      foxEl.addEventListener("pointerdown", () => {
-        triggerCuteReaction();
-      });
+      function initWithPlaceholder() {
+        spriteReady = false;
+        configureMetrics({ frameWidth: FALLBACK_FRAME, frameHeight: FALLBACK_FRAME, hasSprite: false });
+        showError('Foxxy.png is missing. Using placeholder. Add Foxxy.png next to index.html to restore sprite animation.');
+        startApp();
+      }
 
-      foxEl.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
+      foxEl.addEventListener('click', () => triggerCuteReaction());
+      foxEl.addEventListener('pointerdown', () => triggerCuteReaction());
+
+      foxEl.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           triggerCuteReaction();
         }
-        if (event.key === "ArrowUp") {
+
+        if (event.key === 'ArrowUp') {
           event.preventDefault();
           fox.lastInteractionMs = performance.now();
           mouse.active = true;
@@ -481,46 +467,29 @@
         }
       });
 
-      window.addEventListener("pointermove", (event) => {
+      window.addEventListener('pointermove', (event) => {
         mouse.x = event.clientX;
         mouse.active = true;
         fox.lastInteractionMs = performance.now();
         fox.sleepingTriggered = false;
-
-        if (fox.state === "sleep") {
-          returnToMouseFollow();
-        }
+        if (fox.state === 'sleep') returnToMouseFollow();
       });
 
-      window.addEventListener("pointerleave", () => {
-        mouse.active = false;
-      });
+      window.addEventListener('pointerleave', () => { mouse.active = false; });
+      window.addEventListener('resize', recalcBounds);
 
-      window.addEventListener("resize", recalcBounds);
+      spriteImage.addEventListener('load', () => {
+        spriteReady = true;
+        configureMetrics({
+          frameWidth: Math.floor(spriteImage.width / GRID_COLS),
+          frameHeight: Math.floor(spriteImage.height / GRID_ROWS),
+          hasSprite: true
+        });
+        startApp();
+      }, { once: true });
 
-      spriteImage.addEventListener("load", () => {
-        metrics.frameWidth = Math.floor(spriteImage.width / GRID_COLS);
-        metrics.frameHeight = Math.floor(spriteImage.height / GRID_ROWS);
-        metrics.renderFrameWidth = metrics.frameWidth * SCALE;
-        metrics.renderFrameHeight = metrics.frameHeight * SCALE;
-
-        foxEl.style.width = `${metrics.renderFrameWidth}px`;
-        foxEl.style.height = `${metrics.renderFrameHeight}px`;
-        foxEl.style.backgroundImage = `url("${SPRITE_SRC}")`;
-        foxEl.style.backgroundSize =
-          `${spriteImage.width * SCALE}px ${spriteImage.height * SCALE}px`;
-
-        fox.x = clamp((window.innerWidth - metrics.renderFrameWidth) * 0.35, 0, window.innerWidth);
-        recalcBounds();
-
-        render();
-        requestAnimationFrame(loop);
-      });
-
-      spriteImage.addEventListener("error", () => {
-        errorEl.classList.add("show");
-        console.error("Failed to load sprite sheet:", spriteImage.src);
-      });
+      spriteImage.addEventListener('error', initWithPlaceholder, { once: true });
+      spriteImage.src = SPRITE_SRC;
     </script>
   </body>
 </html>
